@@ -48490,6 +48490,7 @@ function renderMarkdownReport(result) {
 
 // src/run.ts
 var AGENT_GATE_COMMENT_MARKER = "<!-- agent-gate-report -->";
+var AGENT_GATE_MANAGED_COMMENT_NOTE = "<!-- This comment is managed by Agent Gate. Do not edit manually. -->";
 function errorMessage(error52) {
   return error52 instanceof Error ? error52.message : String(error52);
 }
@@ -48666,10 +48667,18 @@ async function listIssueComments(octokit, repository, issueNumber) {
 }
 function markedCommentBody(markdownReport) {
   return `${AGENT_GATE_COMMENT_MARKER}
+${AGENT_GATE_MANAGED_COMMENT_NOTE}
+
 ${markdownReport}`;
 }
+function isAgentGateManagedComment(comment) {
+  if (!comment.body?.startsWith(AGENT_GATE_COMMENT_MARKER)) {
+    return false;
+  }
+  return comment.user?.type === "Bot" || comment.user?.login === "github-actions[bot]";
+}
 function latestMarkedComment(comments) {
-  return comments.filter((comment) => comment.body?.startsWith(AGENT_GATE_COMMENT_MARKER)).sort((left, right) => right.id - left.id)[0];
+  return comments.filter(isAgentGateManagedComment).sort((left, right) => right.id - left.id)[0];
 }
 async function upsertPullRequestComment(octokit, repository, issueNumber, markdownReport) {
   const comments = await listIssueComments(octokit, repository, issueNumber);

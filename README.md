@@ -51,6 +51,16 @@ Agent Gate loads policy from the PR base branch and does not execute PR branch c
 
 To let Agent Gate create or update a PR report comment, add `issues: write` to the workflow permissions and set `comment: true`. Keep `contents: read` and `pull-requests: read`; no checkout step is needed. On fork pull requests, GitHub may still provide a read-only token, so comment failures are reported as warnings instead of failing the action.
 
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+with:
+  comment: true
+```
+
 Create `agent-gate.yml` in the repository root:
 
 ```yaml

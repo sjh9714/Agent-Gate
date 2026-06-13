@@ -92,6 +92,10 @@ function workflowFile(overrides: Partial<PullFile> = {}): PullFile {
 interface IssueComment {
   id: number;
   body?: string | null;
+  user?: {
+    login?: string | null;
+    type?: string | null;
+  } | null;
 }
 
 function createOctokit(options: {
@@ -531,7 +535,9 @@ describe("runAction", () => {
         owner: "sjh9714",
         repo: "Agent-Gate",
         issue_number: 5,
-        body: expect.stringContaining("<!-- agent-gate-report -->\n# Agent Gate Report"),
+        body: expect.stringContaining(
+          "<!-- agent-gate-report -->\n<!-- This comment is managed by Agent Gate. Do not edit manually. -->\n\n# Agent Gate Report",
+        ),
       }),
     );
     expect(octokit.rest.issues?.updateComment).not.toHaveBeenCalled();
@@ -544,9 +550,17 @@ describe("runAction", () => {
         [`${BASE_SHA}:agent-gate.yml`]: "version: 1\nmode: block\n",
       },
       comments: [
-        { id: 8, body: "<!-- agent-gate-report -->\nold" },
+        {
+          id: 8,
+          body: "<!-- agent-gate-report -->\nold",
+          user: { login: "github-actions[bot]", type: "Bot" },
+        },
         { id: 3, body: "unrelated" },
-        { id: 21, body: "<!-- agent-gate-report -->\nnewer old" },
+        {
+          id: 21,
+          body: "<!-- agent-gate-report -->\nnewer old",
+          user: { login: "github-actions[bot]", type: "Bot" },
+        },
       ],
     });
     const harness = createHarness({
@@ -563,7 +577,114 @@ describe("runAction", () => {
         owner: "sjh9714",
         repo: "Agent-Gate",
         comment_id: 21,
-        body: expect.stringContaining("<!-- agent-gate-report -->\n# Agent Gate Report"),
+        body: expect.stringContaining(
+          "<!-- agent-gate-report -->\n<!-- This comment is managed by Agent Gate. Do not edit manually. -->\n\n# Agent Gate Report",
+        ),
+      }),
+    );
+    expect(octokit.rest.issues?.createComment).not.toHaveBeenCalled();
+  });
+
+  it("ignores human-owned marker comments and creates a managed comment", async () => {
+    const octokit = createOctokit({
+      files: [],
+      contents: {
+        [`${BASE_SHA}:agent-gate.yml`]: "version: 1\nmode: block\n",
+      },
+      comments: [
+        {
+          id: 99,
+          body: "<!-- agent-gate-report -->\nfake report",
+          user: { login: "alice", type: "User" },
+        },
+      ],
+    });
+    const harness = createHarness({
+      octokit,
+      inputs: {
+        comment: "true",
+      },
+    });
+
+    await runAction(harness.runtime);
+
+    expect(octokit.rest.issues?.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          "<!-- This comment is managed by Agent Gate. Do not edit manually. -->",
+        ),
+      }),
+    );
+    expect(octokit.rest.issues?.updateComment).not.toHaveBeenCalled();
+  });
+
+  it("updates bot-owned marker comments", async () => {
+    const octokit = createOctokit({
+      files: [],
+      contents: {
+        [`${BASE_SHA}:agent-gate.yml`]: "version: 1\nmode: block\n",
+      },
+      comments: [
+        {
+          id: 42,
+          body: "<!-- agent-gate-report -->\nold",
+          user: { login: "github-actions[bot]", type: "Bot" },
+        },
+      ],
+    });
+    const harness = createHarness({
+      octokit,
+      inputs: {
+        comment: "true",
+      },
+    });
+
+    await runAction(harness.runtime);
+
+    expect(octokit.rest.issues?.updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 42,
+      }),
+    );
+    expect(octokit.rest.issues?.createComment).not.toHaveBeenCalled();
+  });
+
+  it("updates the newest bot-owned marker when human and bot markers both exist", async () => {
+    const octokit = createOctokit({
+      files: [],
+      contents: {
+        [`${BASE_SHA}:agent-gate.yml`]: "version: 1\nmode: block\n",
+      },
+      comments: [
+        {
+          id: 100,
+          body: "<!-- agent-gate-report -->\nhuman marker",
+          user: { login: "alice", type: "User" },
+        },
+        {
+          id: 12,
+          body: "<!-- agent-gate-report -->\nolder bot marker",
+          user: { login: "github-actions[bot]", type: "Bot" },
+        },
+        {
+          id: 61,
+          body: "<!-- agent-gate-report -->\nnewer bot marker",
+          user: { login: "agent-gate[bot]", type: "Bot" },
+        },
+      ],
+    });
+    const harness = createHarness({
+      octokit,
+      inputs: {
+        comment: "true",
+      },
+    });
+
+    await runAction(harness.runtime);
+
+    expect(octokit.rest.issues?.updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 61,
       }),
     );
     expect(octokit.rest.issues?.createComment).not.toHaveBeenCalled();

@@ -107,6 +107,10 @@ interface UpdateIssueCommentArgs {
 interface IssueComment {
   id: number;
   body?: string | null;
+  user?: {
+    login?: string | null;
+    type?: string | null;
+  } | null;
 }
 
 type PaginatedMethod<TArgs, TItem> = (args: TArgs) => Promise<{ data: TItem[] }>;
@@ -152,6 +156,8 @@ export interface ActionRuntime {
 }
 
 const AGENT_GATE_COMMENT_MARKER = "<!-- agent-gate-report -->";
+const AGENT_GATE_MANAGED_COMMENT_NOTE =
+  "<!-- This comment is managed by Agent Gate. Do not edit manually. -->";
 
 interface FetchContentOptions {
   owner: string;
@@ -410,13 +416,19 @@ async function listIssueComments(
 }
 
 function markedCommentBody(markdownReport: string): string {
-  return `${AGENT_GATE_COMMENT_MARKER}\n${markdownReport}`;
+  return `${AGENT_GATE_COMMENT_MARKER}\n${AGENT_GATE_MANAGED_COMMENT_NOTE}\n\n${markdownReport}`;
+}
+
+function isAgentGateManagedComment(comment: IssueComment): boolean {
+  if (!comment.body?.startsWith(AGENT_GATE_COMMENT_MARKER)) {
+    return false;
+  }
+
+  return comment.user?.type === "Bot" || comment.user?.login === "github-actions[bot]";
 }
 
 function latestMarkedComment(comments: IssueComment[]): IssueComment | undefined {
-  return comments
-    .filter((comment) => comment.body?.startsWith(AGENT_GATE_COMMENT_MARKER))
-    .sort((left, right) => right.id - left.id)[0];
+  return comments.filter(isAgentGateManagedComment).sort((left, right) => right.id - left.id)[0];
 }
 
 async function upsertPullRequestComment(
