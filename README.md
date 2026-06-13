@@ -111,6 +111,11 @@ Expected result: Agent Gate reports a blocked PR with `workflow/permission-escal
 
 Additional unsafe-pr-zoo demos:
 
+- `agent-control-plane-drift`: blocks `AGENTS.md` changes because they can change future agent behavior.
+- `out-of-scope-agent-edit`: blocks a payment webhook edit outside the PR contract's `allowed_paths`.
+- `missing-test-evidence`: blocks an auth logic change without matching auth test changes.
+- `mcp-config-drift`: blocks `.mcp.json` changes because MCP config can change which tools an agent can call.
+
 ```bash
 node packages/cli/dist/main.js replay fixtures/unsafe-pr-zoo/agent-control-plane-drift
 node packages/cli/dist/main.js replay fixtures/unsafe-pr-zoo/out-of-scope-agent-edit
