@@ -6,6 +6,18 @@ function matchingScopePaths(ctx: RuleContext, file: FileChange, patterns: string
   return scopePathsForFile(file).filter((path) => ctx.helpers.matchesAny(path, patterns));
 }
 
+function isPresentAfterChange(file: FileChange): boolean {
+  return file.status !== "removed";
+}
+
+function isMatchingCurrentTestPath(
+  ctx: RuleContext,
+  file: FileChange,
+  patterns: string[],
+): boolean {
+  return isPresentAfterChange(file) && ctx.helpers.matchesAny(file.path, patterns);
+}
+
 function compareAreaNames(left: string, right: string): number {
   if (left < right) {
     return -1;
@@ -44,7 +56,7 @@ export const missingTestEvidenceRule: Rule = {
 
       const hasMatchingTestChange = ctx.helpers
         .changedFiles()
-        .some((file) => matchingScopePaths(ctx, file, area.require_tests).length > 0);
+        .some((file) => isMatchingCurrentTestPath(ctx, file, area.require_tests));
 
       if (hasMatchingTestChange) {
         continue;

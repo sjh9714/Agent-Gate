@@ -10,7 +10,10 @@ describe("agent-control-plane/drift", () => {
     "CLAUDE.md",
     "services/api/CLAUDE.md",
     ".cursor/rules.md",
+    ".github/copilot-instructions.md",
     ".mcp.json",
+    "claude_desktop_config.json",
+    ".codex/config.toml",
   ])("emits for %s", async (path) => {
     const result = await analyze(
       createAnalysisInput({

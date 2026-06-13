@@ -48,6 +48,73 @@ describe("evidence/missing-test-change", () => {
     );
   });
 
+  it("emits when auth source changes and a matching test file is removed", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: authTestConfig,
+        files: [
+          fileChange("src/auth/session.ts"),
+          {
+            ...fileChange("tests/auth/session.test.ts"),
+            status: "removed",
+            additions: 0,
+            deletions: 12,
+          },
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "evidence/missing-test-change",
+        severity: "error",
+      }),
+    );
+  });
+
+  it("emits when auth source changes and a test file is renamed away from required tests", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: authTestConfig,
+        files: [
+          fileChange("src/auth/session.ts"),
+          {
+            ...fileChange("docs/session-test-notes.md"),
+            previousPath: "tests/auth/session.test.ts",
+            status: "renamed",
+          },
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "evidence/missing-test-change",
+        severity: "error",
+      }),
+    );
+  });
+
+  it("does not emit when auth source changes and a test file is renamed into required tests", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: authTestConfig,
+        files: [
+          fileChange("src/auth/session.ts"),
+          {
+            ...fileChange("tests/auth/session.test.ts"),
+            previousPath: "docs/session-test-notes.md",
+            status: "renamed",
+          },
+        ],
+      }),
+    );
+
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "evidence/missing-test-change",
+    );
+  });
+
   it("does not emit for areas without required tests", async () => {
     const result = await analyze(
       createAnalysisInput({
