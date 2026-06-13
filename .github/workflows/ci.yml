@@ -44,15 +44,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test
-        run: pnpm test
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
       - name: Build
         run: pnpm build
 
@@ -62,6 +53,15 @@ jobs:
             echo "::error::packages/action/dist/index.cjs is out of date. Run pnpm build and commit the rebuilt bundle."
             exit 1
           fi
+
+      - name: Test
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Check formatting
         run: pnpm format:check
