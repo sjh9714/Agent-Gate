@@ -32898,8 +32898,13 @@ function getOctokit(token2, options, ...additionalPlugins) {
   return new GitHubWithPlugins(getOctokitOptions(token2, options));
 }
 
-// src/index.ts
-import { writeFile as writeFile2 } from "fs/promises";
+// src/fileWriter.ts
+import { mkdir as mkdir2, writeFile as writeFile2 } from "fs/promises";
+import { dirname } from "path";
+async function writeTextFile(path, content) {
+  await mkdir2(dirname(path), { recursive: true });
+  await writeFile2(path, content);
+}
 
 // ../core/dist/index.js
 var import_picomatch = __toESM(require_picomatch2(), 1);
@@ -48493,12 +48498,18 @@ function inputOrDefault(value, fallback) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : fallback;
 }
-function booleanInput(value, fallback) {
+function parseBooleanInput(name, value, fallback) {
   const trimmed = value.trim().toLowerCase();
   if (trimmed === "") {
     return fallback;
   }
-  return trimmed === "true";
+  if (trimmed === "true") {
+    return true;
+  }
+  if (trimmed === "false") {
+    return false;
+  }
+  throw new Error(`Invalid boolean input ${name}: ${value}. Expected true or false.`);
 }
 function parseModeOverride(value) {
   const trimmed = value.trim();
@@ -48544,6 +48555,31 @@ function changeSet(files) {
     }
   };
 }
+function splitRepositoryFullName(fullName) {
+  if (!fullName?.includes("/")) {
+    return void 0;
+  }
+  const [owner, repo] = fullName.split("/", 2);
+  if (!owner || !repo) {
+    return void 0;
+  }
+  return { owner, repo };
+}
+function baseRepository(context3) {
+  return context3.repo;
+}
+function headRepository(context3, pr) {
+  const byFullName = splitRepositoryFullName(pr.head.repo?.full_name);
+  if (byFullName) {
+    return byFullName;
+  }
+  const owner = pr.head.repo?.owner?.login;
+  const repo = pr.head.repo?.name;
+  if (owner && repo) {
+    return { owner, repo };
+  }
+  return context3.repo;
+}
 function isFileContent(data) {
   return typeof data === "object" && data !== null && !Array.isArray(data);
 }
@@ -48564,10 +48600,10 @@ async function fetchRepositoryTextContent(octokit, options) {
     return null;
   }
 }
-async function listPullFiles(octokit, owner, repo, pullNumber) {
+async function listPullFiles(octokit, repository, pullNumber) {
   const args = {
-    owner,
-    repo,
+    owner: repository.owner,
+    repo: repository.repo,
     pull_number: pullNumber,
     per_page: 100
   };
@@ -48577,19 +48613,19 @@ async function listPullFiles(octokit, owner, repo, pullNumber) {
   const response = await octokit.rest.pulls.listFiles(args);
   return response.data;
 }
-async function fileChangeFromPullFile(octokit, owner, repo, baseSha, headSha, file2) {
+async function fileChangeFromPullFile(octokit, baseRepo, headRepo, baseSha, headSha, file2) {
   const status = fileStatus(file2.status);
   const previousPath = stringOrUndefined(file2.previous_filename);
   const basePath = previousPath ?? file2.filename;
   const baseContent = await fetchRepositoryTextContent(octokit, {
-    owner,
-    repo,
+    owner: baseRepo.owner,
+    repo: baseRepo.repo,
     path: basePath,
     ref: baseSha
   });
   const headContent = status === "removed" ? null : await fetchRepositoryTextContent(octokit, {
-    owner,
-    repo,
+    owner: headRepo.owner,
+    repo: headRepo.repo,
     path: file2.filename,
     ref: headSha
   });
@@ -48604,11 +48640,11 @@ async function fileChangeFromPullFile(octokit, owner, repo, baseSha, headSha, fi
     headContent
   };
 }
-async function loadChangedFiles(octokit, owner, repo, pr) {
-  const pullFiles = await listPullFiles(octokit, owner, repo, pr.number);
+async function loadChangedFiles(octokit, baseRepo, headRepo, pr) {
+  const pullFiles = await listPullFiles(octokit, baseRepo, pr.number);
   return Promise.all(
     pullFiles.map(
-      (file2) => fileChangeFromPullFile(octokit, owner, repo, pr.base.sha, pr.head.sha, file2)
+      (file2) => fileChangeFromPullFile(octokit, baseRepo, headRepo, pr.base.sha, pr.head.sha, file2)
     )
   );
 }
@@ -48660,14 +48696,12 @@ async function runActionInner(runtime) {
     runtime.getInput("report-markdown"),
     "agent-gate-report.md"
   );
-  const config2 = await loadConfig(
-    runtime,
-    context3.repo.owner,
-    context3.repo.repo,
-    pr.base.sha,
-    configPath
-  );
-  const files = await loadChangedFiles(runtime.octokit, context3.repo.owner, context3.repo.repo, pr);
+  const comment = parseBooleanInput("comment", runtime.getInput("comment"), false);
+  const failOnBlock = parseBooleanInput("fail-on-block", runtime.getInput("fail-on-block"), true);
+  const baseRepo = baseRepository(context3);
+  const headRepo = headRepository(context3, pr);
+  const config2 = await loadConfig(runtime, baseRepo.owner, baseRepo.repo, pr.base.sha, configPath);
+  const files = await loadChangedFiles(runtime.octokit, baseRepo, headRepo, pr);
   const result = await analyze(analysisInput(context3, pr, config2, files, runtime.now()));
   const jsonReport = renderJsonReport(result);
   const markdownReport = renderMarkdownReport(result);
@@ -48676,11 +48710,12 @@ async function runActionInner(runtime) {
   runtime.setOutput("decision", result.decision);
   runtime.setOutput("risk-score", result.riskScore);
   runtime.setOutput("report-json", reportJsonPath);
+  runtime.setOutput("report-markdown", reportMarkdownPath);
   await runtime.summary.addRaw(markdownReport).write();
-  if (booleanInput(runtime.getInput("comment"), false)) {
+  if (comment) {
     runtime.notice("Agent Gate PR comments are not implemented yet.");
   }
-  if (result.decision === "block" && booleanInput(runtime.getInput("fail-on-block"), true)) {
+  if (result.decision === "block" && failOnBlock) {
     runtime.setFailed("Agent Gate blocked this pull request.");
   }
   return result;
@@ -48716,7 +48751,7 @@ if (!token) {
     setFailed: (message) => setFailed(message),
     setOutput: (name, value) => setOutput(name, value),
     summary: summary2,
-    writeFile: writeFile2,
+    writeFile: writeTextFile,
     now: () => /* @__PURE__ */ new Date()
   });
 }
@@ -48742,4 +48777,3 @@ content-type/dist/index.js:
   (* v8 ignore next -- @preserve *)
   (* v8 ignore else -- @preserve *)
 */
-//# sourceMappingURL=index.js.map

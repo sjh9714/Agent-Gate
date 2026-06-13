@@ -14,6 +14,11 @@ import {
 
 type Mode = AgentGateConfig["mode"];
 
+interface RepositoryRef {
+  owner: string;
+  repo: string;
+}
+
 export interface PullFile {
   filename: string;
   status: string;
@@ -36,6 +41,11 @@ export interface ActionPullRequest {
     ref: string;
     sha: string;
     repo?: {
+      full_name?: string | null;
+      name?: string | null;
+      owner?: {
+        login?: string | null;
+      } | null;
       fork?: boolean | null;
     } | null;
   };
@@ -124,14 +134,22 @@ function inputOrDefault(value: string, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-function booleanInput(value: string, fallback: boolean): boolean {
+function parseBooleanInput(name: string, value: string, fallback: boolean): boolean {
   const trimmed = value.trim().toLowerCase();
 
   if (trimmed === "") {
     return fallback;
   }
 
-  return trimmed === "true";
+  if (trimmed === "true") {
+    return true;
+  }
+
+  if (trimmed === "false") {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean input ${name}: ${value}. Expected true or false.`);
 }
 
 function parseModeOverride(value: string): Mode | undefined {
@@ -190,6 +208,41 @@ function changeSet(files: FileChange[]): ChangeSet {
   };
 }
 
+function splitRepositoryFullName(fullName: string | null | undefined): RepositoryRef | undefined {
+  if (!fullName?.includes("/")) {
+    return undefined;
+  }
+
+  const [owner, repo] = fullName.split("/", 2);
+
+  if (!owner || !repo) {
+    return undefined;
+  }
+
+  return { owner, repo };
+}
+
+function baseRepository(context: ActionContext): RepositoryRef {
+  return context.repo;
+}
+
+function headRepository(context: ActionContext, pr: ActionPullRequest): RepositoryRef {
+  const byFullName = splitRepositoryFullName(pr.head.repo?.full_name);
+
+  if (byFullName) {
+    return byFullName;
+  }
+
+  const owner = pr.head.repo?.owner?.login;
+  const repo = pr.head.repo?.name;
+
+  if (owner && repo) {
+    return { owner, repo };
+  }
+
+  return context.repo;
+}
+
 function isFileContent(
   data: unknown,
 ): data is { encoding?: unknown; content?: unknown; type?: unknown } {
@@ -223,13 +276,12 @@ export async function fetchRepositoryTextContent(
 
 async function listPullFiles(
   octokit: OctokitLike,
-  owner: string,
-  repo: string,
+  repository: RepositoryRef,
   pullNumber: number,
 ): Promise<PullFile[]> {
   const args = {
-    owner,
-    repo,
+    owner: repository.owner,
+    repo: repository.repo,
     pull_number: pullNumber,
     per_page: 100,
   };
@@ -244,8 +296,8 @@ async function listPullFiles(
 
 async function fileChangeFromPullFile(
   octokit: OctokitLike,
-  owner: string,
-  repo: string,
+  baseRepo: RepositoryRef,
+  headRepo: RepositoryRef,
   baseSha: string,
   headSha: string,
   file: PullFile,
@@ -254,8 +306,8 @@ async function fileChangeFromPullFile(
   const previousPath = stringOrUndefined(file.previous_filename);
   const basePath = previousPath ?? file.filename;
   const baseContent = await fetchRepositoryTextContent(octokit, {
-    owner,
-    repo,
+    owner: baseRepo.owner,
+    repo: baseRepo.repo,
     path: basePath,
     ref: baseSha,
   });
@@ -263,8 +315,8 @@ async function fileChangeFromPullFile(
     status === "removed"
       ? null
       : await fetchRepositoryTextContent(octokit, {
-          owner,
-          repo,
+          owner: headRepo.owner,
+          repo: headRepo.repo,
           path: file.filename,
           ref: headSha,
         });
@@ -283,15 +335,15 @@ async function fileChangeFromPullFile(
 
 async function loadChangedFiles(
   octokit: OctokitLike,
-  owner: string,
-  repo: string,
+  baseRepo: RepositoryRef,
+  headRepo: RepositoryRef,
   pr: ActionPullRequest,
 ): Promise<FileChange[]> {
-  const pullFiles = await listPullFiles(octokit, owner, repo, pr.number);
+  const pullFiles = await listPullFiles(octokit, baseRepo, pr.number);
 
   return Promise.all(
     pullFiles.map((file) =>
-      fileChangeFromPullFile(octokit, owner, repo, pr.base.sha, pr.head.sha, file),
+      fileChangeFromPullFile(octokit, baseRepo, headRepo, pr.base.sha, pr.head.sha, file),
     ),
   );
 }
@@ -363,14 +415,12 @@ async function runActionInner(runtime: ActionRuntime): Promise<AnalysisResult> {
     runtime.getInput("report-markdown"),
     "agent-gate-report.md",
   );
-  const config = await loadConfig(
-    runtime,
-    context.repo.owner,
-    context.repo.repo,
-    pr.base.sha,
-    configPath,
-  );
-  const files = await loadChangedFiles(runtime.octokit, context.repo.owner, context.repo.repo, pr);
+  const comment = parseBooleanInput("comment", runtime.getInput("comment"), false);
+  const failOnBlock = parseBooleanInput("fail-on-block", runtime.getInput("fail-on-block"), true);
+  const baseRepo = baseRepository(context);
+  const headRepo = headRepository(context, pr);
+  const config = await loadConfig(runtime, baseRepo.owner, baseRepo.repo, pr.base.sha, configPath);
+  const files = await loadChangedFiles(runtime.octokit, baseRepo, headRepo, pr);
   const result = await analyze(analysisInput(context, pr, config, files, runtime.now()));
   const jsonReport = renderJsonReport(result);
   const markdownReport = renderMarkdownReport(result);
@@ -380,13 +430,14 @@ async function runActionInner(runtime: ActionRuntime): Promise<AnalysisResult> {
   runtime.setOutput("decision", result.decision);
   runtime.setOutput("risk-score", result.riskScore);
   runtime.setOutput("report-json", reportJsonPath);
+  runtime.setOutput("report-markdown", reportMarkdownPath);
   await runtime.summary.addRaw(markdownReport).write();
 
-  if (booleanInput(runtime.getInput("comment"), false)) {
+  if (comment) {
     runtime.notice("Agent Gate PR comments are not implemented yet.");
   }
 
-  if (result.decision === "block" && booleanInput(runtime.getInput("fail-on-block"), true)) {
+  if (result.decision === "block" && failOnBlock) {
     runtime.setFailed("Agent Gate blocked this pull request.");
   }
 

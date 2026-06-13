@@ -1,7 +1,7 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { writeFile } from "node:fs/promises";
 
+import { writeTextFile } from "./fileWriter.js";
 import { runAction, type ActionContext, type ActionSummary, type OctokitLike } from "./run.js";
 
 const token = core.getInput("github-token");
@@ -26,7 +26,7 @@ if (!token) {
     setFailed: (message) => core.setFailed(message),
     setOutput: (name, value) => core.setOutput(name, value),
     summary,
-    writeFile,
+    writeFile: writeTextFile,
     now: () => new Date(),
   });
 }

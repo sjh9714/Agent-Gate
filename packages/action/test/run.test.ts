@@ -8,6 +8,7 @@ import {
   type OctokitLike,
   type PullFile,
 } from "../src/run.js";
+import { writeTextFile } from "../src/fileWriter.js";
 
 const BASE_SHA = "base-sha";
 const HEAD_SHA = "head-sha";
@@ -29,6 +30,7 @@ function contentResponse(text: string) {
 function validContractBody() {
   return [
     "<!-- agent-gate-contract",
+    "version: 1",
     "agent: codex",
     "task: workflow hardening",
     "allowed_paths:",
@@ -235,9 +237,11 @@ describe("runAction", () => {
 
     expect(result?.decision).toBe("block");
     expect(result?.findings.map((finding) => finding.ruleId)).not.toContain("contract/missing");
+    expect(result?.findings.map((finding) => finding.ruleId)).not.toContain("contract/invalid");
     expect(harness.outputs.get("decision")).toBe("block");
     expect(harness.outputs.get("risk-score")).toBe(String(result?.riskScore));
     expect(harness.outputs.get("report-json")).toBe("agent-gate-report.json");
+    expect(harness.outputs.get("report-markdown")).toBe("agent-gate-report.md");
     expect(JSON.parse(harness.writtenFiles.get("agent-gate-report.json") ?? "{}")).toMatchObject({
       decision: "block",
     });
@@ -249,6 +253,8 @@ describe("runAction", () => {
     expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
       expect.objectContaining({
         path: "agent-gate.yml",
+        owner: "sjh9714",
+        repo: "Agent-Gate",
         ref: BASE_SHA,
       }),
     );
@@ -274,12 +280,85 @@ describe("runAction", () => {
     await runAction(harness.runtime);
 
     expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "src/old.ts", ref: BASE_SHA }),
+      expect.objectContaining({
+        owner: "sjh9714",
+        repo: "Agent-Gate",
+        path: "src/old.ts",
+        ref: BASE_SHA,
+      }),
     );
     expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "src/new.ts", ref: HEAD_SHA }),
+      expect.objectContaining({
+        owner: "sjh9714",
+        repo: "Agent-Gate",
+        path: "src/new.ts",
+        ref: HEAD_SHA,
+      }),
     );
     expect(harness.outputs.get("decision")).toBe("pass");
+  });
+
+  it("fetches fork PR head content from the fork repository", async () => {
+    const octokit = createOctokit({
+      files: [workflowFile()],
+      contents: {
+        [`${BASE_SHA}:agent-gate.yml`]: "version: 1\nmode: block\n",
+        [`${BASE_SHA}:.github/workflows/release.yml`]: "permissions:\n  contents: read\n",
+        [`${HEAD_SHA}:.github/workflows/release.yml`]: "permissions:\n  contents: write\n",
+      },
+    });
+    const harness = createHarness({
+      context: prContext({
+        body: "",
+        head: {
+          ref: "fork/workflow",
+          sha: HEAD_SHA,
+          repo: {
+            full_name: "fork-owner/Agent-Gate",
+            name: "Agent-Gate",
+            owner: {
+              login: "fork-owner",
+            },
+            fork: true,
+          },
+        },
+      }),
+      octokit,
+    });
+
+    await runAction(harness.runtime);
+
+    expect(octokit.rest.pulls.listFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "sjh9714",
+        repo: "Agent-Gate",
+      }),
+    );
+    expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "sjh9714",
+        repo: "Agent-Gate",
+        path: "agent-gate.yml",
+        ref: BASE_SHA,
+      }),
+    );
+    expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "sjh9714",
+        repo: "Agent-Gate",
+        path: ".github/workflows/release.yml",
+        ref: BASE_SHA,
+      }),
+    );
+    expect(octokit.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "fork-owner",
+        repo: "Agent-Gate",
+        path: ".github/workflows/release.yml",
+        ref: HEAD_SHA,
+      }),
+    );
+    expect(harness.outputs.get("decision")).toBe("block");
   });
 
   it("skips removed head content and tolerates missing added base content", async () => {
@@ -393,6 +472,34 @@ describe("runAction", () => {
     expect(harness.notices).toEqual(["Agent Gate PR comments are not implemented yet."]);
     expect(octokit.rest.issues?.createComment).not.toHaveBeenCalled();
   });
+
+  it("fails clearly for invalid fail-on-block input", async () => {
+    const harness = createHarness({
+      inputs: {
+        "fail-on-block": "yes",
+      },
+    });
+
+    await runAction(harness.runtime);
+
+    expect(harness.failures).toEqual([
+      "Invalid boolean input fail-on-block: yes. Expected true or false.",
+    ]);
+  });
+
+  it("fails clearly for invalid comment input", async () => {
+    const harness = createHarness({
+      inputs: {
+        comment: "nope",
+      },
+    });
+
+    await runAction(harness.runtime);
+
+    expect(harness.failures).toEqual([
+      "Invalid boolean input comment: nope. Expected true or false.",
+    ]);
+  });
 });
 
 describe("fetchRepositoryTextContent", () => {
@@ -430,5 +537,19 @@ describe("fetchRepositoryTextContent", () => {
         ref: "main",
       }),
     ).resolves.toBeNull();
+  });
+});
+
+describe("writeTextFile", () => {
+  it("creates parent directories for nested report paths", async () => {
+    const dir = await import("node:os").then(({ tmpdir }) => tmpdir());
+    const { mkdtemp, readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const root = await mkdtemp(join(dir, "agent-gate-action-"));
+    const reportPath = join(root, "reports", "agent-gate.md");
+
+    await writeTextFile(reportPath, "# Agent Gate Report\n");
+
+    await expect(readFile(reportPath, "utf8")).resolves.toBe("# Agent Gate Report\n");
   });
 });
