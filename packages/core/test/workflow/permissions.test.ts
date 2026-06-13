@@ -21,6 +21,8 @@ describe("workflow permission normalization", () => {
     expect(permissions.contents).toBe("write");
     expect(permissions["pull-requests"]).toBe("write");
     expect(permissions["id-token"]).toBe("write");
+    expect(permissions.models).toBe("read");
+    expect(permissions["vulnerability-alerts"]).toBe("read");
   });
 
   it("normalizes empty permission objects as none", () => {
@@ -42,6 +44,40 @@ describe("workflow permission normalization", () => {
     expect(permissions["pull-requests"]).toBe("write");
     expect(permissions["id-token"]).toBe("none");
     expect(permissions).not.toHaveProperty("unknown");
+  });
+
+  it("normalizes newer write-capable permission scopes", () => {
+    const permissions = normalizeWorkflowPermissions({
+      "artifact-metadata": "write",
+      attestations: "write",
+      "code-quality": "write",
+      discussions: "write",
+    });
+
+    expect(permissions["artifact-metadata"]).toBe("write");
+    expect(permissions.attestations).toBe("write");
+    expect(permissions["code-quality"]).toBe("write");
+    expect(permissions.discussions).toBe("write");
+  });
+
+  it("normalizes read-only permission scopes", () => {
+    const permissions = normalizeWorkflowPermissions({
+      models: "read",
+      "vulnerability-alerts": "read",
+    });
+
+    expect(permissions.models).toBe("read");
+    expect(permissions["vulnerability-alerts"]).toBe("read");
+  });
+
+  it("does not normalize read-only permission scopes to write", () => {
+    const permissions = normalizeWorkflowPermissions({
+      models: "write",
+      "vulnerability-alerts": "write",
+    });
+
+    expect(permissions.models).toBe("none");
+    expect(permissions["vulnerability-alerts"]).toBe("none");
   });
 
   it("compares permission ranks", () => {

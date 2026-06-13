@@ -2,8 +2,11 @@ import type { AgentGateConfig } from "../config/schema.js";
 import type { Finding, Severity } from "../types.js";
 import {
   findUnpinnedThirdPartyActions,
+  findJobsWithIdTokenWritePermission,
+  findJobsWithWriteAllPermissions,
   hasAddedSecretsReference,
   hasIdTokenWritePermission,
+  hasOwnWorkflowPermissions,
   hasPullRequestTargetCheckoutOfHead,
   hasWriteAllPermissions,
 } from "../workflow/dangerousPatterns.js";
@@ -72,6 +75,31 @@ export const workflowDangerousPatternRule: Rule = {
 
       if (hasIdTokenWritePermission(parsed.workflow)) {
         findings.push(dangerousFinding(file.path, config.severity, "id-token: write"));
+      }
+
+      for (const jobId of findJobsWithWriteAllPermissions(parsed.workflow)) {
+        findings.push(
+          dangerousFinding(file.path, config.severity, "job permissions: write-all", [
+            { label: "job", value: jobId },
+          ]),
+        );
+      }
+
+      for (const jobId of findJobsWithIdTokenWritePermission(parsed.workflow)) {
+        findings.push(
+          dangerousFinding(file.path, config.severity, "job id-token: write", [
+            { label: "job", value: jobId },
+          ]),
+        );
+      }
+
+      const base = file.baseContent ? parseWorkflow(file.baseContent) : undefined;
+      if (
+        base?.kind === "valid" &&
+        hasOwnWorkflowPermissions(base.workflow) &&
+        !hasOwnWorkflowPermissions(parsed.workflow)
+      ) {
+        findings.push(dangerousFinding(file.path, "warn", "explicit workflow permissions removed"));
       }
 
       if (

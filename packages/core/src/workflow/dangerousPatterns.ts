@@ -42,8 +42,42 @@ export function hasIdTokenWritePermission(workflow: WorkflowDocument): boolean {
   return normalizeWorkflowPermissions(workflow.permissions)["id-token"] === "write";
 }
 
+export function hasOwnWorkflowPermissions(workflow: WorkflowDocument): boolean {
+  return Object.hasOwn(workflow, "permissions");
+}
+
 function workflowJobs(workflow: WorkflowDocument): Record<string, unknown> {
   return isRecord(workflow.jobs) ? workflow.jobs : {};
+}
+
+export interface JobPermissions {
+  jobId: string;
+  permissions: unknown;
+}
+
+export function findJobPermissions(workflow: WorkflowDocument): JobPermissions[] {
+  return Object.entries(workflowJobs(workflow)).flatMap(([jobId, job]) => {
+    if (!isRecord(job) || !Object.hasOwn(job, "permissions")) {
+      return [];
+    }
+
+    return [{ jobId, permissions: job.permissions }];
+  });
+}
+
+export function findJobsWithWriteAllPermissions(workflow: WorkflowDocument): string[] {
+  return findJobPermissions(workflow)
+    .filter(
+      ({ permissions }) =>
+        typeof permissions === "string" && permissions.toLowerCase() === "write-all",
+    )
+    .map(({ jobId }) => jobId);
+}
+
+export function findJobsWithIdTokenWritePermission(workflow: WorkflowDocument): string[] {
+  return findJobPermissions(workflow)
+    .filter(({ permissions }) => normalizeWorkflowPermissions(permissions)["id-token"] === "write")
+    .map(({ jobId }) => jobId);
 }
 
 function jobSteps(job: unknown): unknown[] {
@@ -123,10 +157,18 @@ export function hasAddedSecretsReference(patch: string | undefined): boolean {
     return false;
   }
 
+  const secretPatterns = [
+    /secrets\.[A-Za-z0-9_]+/,
+    /secrets\[['"][A-Za-z0-9_]+['"]\]/,
+    /toJson\(\s*secrets\s*\)/,
+  ];
+
   return patch
     .split("\n")
     .some(
       (line) =>
-        line.startsWith("+") && !line.startsWith("+++") && /secrets\.[A-Za-z0-9_]+/.test(line),
+        line.startsWith("+") &&
+        !line.startsWith("+++") &&
+        secretPatterns.some((pattern) => pattern.test(line)),
     );
 }

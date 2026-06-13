@@ -1,16 +1,22 @@
 export const KNOWN_WORKFLOW_PERMISSIONS = [
   "actions",
+  "artifact-metadata",
+  "attestations",
   "checks",
+  "code-quality",
   "contents",
   "deployments",
+  "discussions",
   "id-token",
   "issues",
+  "models",
   "packages",
   "pages",
   "pull-requests",
   "repository-projects",
   "security-events",
   "statuses",
+  "vulnerability-alerts",
 ] as const;
 
 export type WorkflowPermissionName = (typeof KNOWN_WORKFLOW_PERMISSIONS)[number];
@@ -28,6 +34,10 @@ const PERMISSION_RANK: Record<WorkflowPermissionValue, number> = {
   read: 1,
   write: 2,
 };
+
+const READ_ONLY_PERMISSIONS = new Set<WorkflowPermissionName>(["models", "vulnerability-alerts"]);
+
+const WRITE_ONLY_OR_NONE_PERMISSIONS = new Set<WorkflowPermissionName>(["id-token"]);
 
 function emptyPermissions(): NormalizedWorkflowPermissions {
   return Object.fromEntries(
@@ -49,8 +59,12 @@ function normalizePermissionValue(
 
   const normalized = value.toLowerCase();
 
-  if (permission === "id-token") {
+  if (WRITE_ONLY_OR_NONE_PERMISSIONS.has(permission)) {
     return normalized === "write" ? "write" : "none";
+  }
+
+  if (READ_ONLY_PERMISSIONS.has(permission)) {
+    return normalized === "read" ? "read" : "none";
   }
 
   if (normalized === "read" || normalized === "write" || normalized === "none") {
@@ -68,13 +82,13 @@ export function normalizeWorkflowPermissions(input: unknown): NormalizedWorkflow
 
     if (normalized === "write-all") {
       for (const permission of KNOWN_WORKFLOW_PERMISSIONS) {
-        permissions[permission] = "write";
+        permissions[permission] = READ_ONLY_PERMISSIONS.has(permission) ? "read" : "write";
       }
     }
 
     if (normalized === "read-all") {
       for (const permission of KNOWN_WORKFLOW_PERMISSIONS) {
-        permissions[permission] = permission === "id-token" ? "none" : "read";
+        permissions[permission] = WRITE_ONLY_OR_NONE_PERMISSIONS.has(permission) ? "none" : "read";
       }
     }
 

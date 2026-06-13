@@ -57,6 +57,122 @@ describe("workflow/dangerous-pattern", () => {
     );
   });
 
+  it("emits for job-level permissions write-all", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            headContent:
+              "permissions: {}\njobs:\n  release:\n    permissions: write-all\n    steps:\n      - run: echo release\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "workflow/dangerous-pattern",
+        severity: "error",
+        evidence: expect.arrayContaining([
+          { label: "pattern", value: "job permissions: write-all" },
+          { label: "job", value: "release" },
+        ]),
+      }),
+    );
+  });
+
+  it("emits for job-level id-token write", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            headContent:
+              "permissions: {}\njobs:\n  deploy:\n    permissions:\n      id-token: write\n    steps:\n      - run: echo deploy\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "workflow/dangerous-pattern",
+        severity: "error",
+        evidence: expect.arrayContaining([
+          { label: "pattern", value: "job id-token: write" },
+          { label: "job", value: "deploy" },
+        ]),
+      }),
+    );
+  });
+
+  it("emits when explicit workflow permissions are removed", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            baseContent: "permissions: {}\n",
+            headContent: "jobs:\n  test:\n    steps:\n      - run: echo test\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "workflow/dangerous-pattern",
+        severity: "warn",
+        evidence: expect.arrayContaining([
+          { label: "pattern", value: "explicit workflow permissions removed" },
+        ]),
+      }),
+    );
+  });
+
+  it("emits when explicit workflow permissions are removed from read permissions", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            baseContent: "permissions:\n  contents: read\n",
+            headContent: "jobs:\n  test:\n    steps:\n      - run: echo test\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "workflow/dangerous-pattern",
+        severity: "warn",
+        evidence: expect.arrayContaining([
+          { label: "pattern", value: "explicit workflow permissions removed" },
+        ]),
+      }),
+    );
+  });
+
+  it("does not emit when base and head both omit workflow permissions", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            baseContent: "jobs:\n  test:\n    steps:\n      - run: echo test\n",
+            headContent: "jobs:\n  test:\n    steps:\n      - run: echo test\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "workflow/dangerous-pattern",
+    );
+  });
+
   it("emits for pull_request_target workflows that check out PR head", async () => {
     const result = await analyze(
       createAnalysisInput({
@@ -147,14 +263,19 @@ describe("workflow/dangerous-pattern", () => {
     );
   });
 
-  it("emits a warning for added secrets references in patches", async () => {
+  it.each([
+    "+      TOKEN: ${{ secrets.MY_SECRET }}\n",
+    "+      TOKEN: ${{ secrets['MY_SECRET'] }}\n",
+    '+      TOKEN: ${{ secrets["MY_SECRET"] }}\n',
+    "+      echo '${{ toJson(secrets) }}'\n",
+  ])("emits a warning for added secrets references in patch line %s", async (patch) => {
     const result = await analyze(
       createAnalysisInput({
         config: parseConfig("version: 1\nmode: block\n"),
         files: [
           workflowChange({
             headContent: "permissions: {}\n",
-            patch: "+      TOKEN: ${{ secrets.MY_SECRET }}\n",
+            patch,
           }),
         ],
       }),
@@ -166,6 +287,24 @@ describe("workflow/dangerous-pattern", () => {
         severity: "warn",
         evidence: expect.arrayContaining([{ label: "pattern", value: "added secrets reference" }]),
       }),
+    );
+  });
+
+  it("ignores non-added secrets references in patches", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            headContent: "permissions: {}\n",
+            patch: "       TOKEN: ${{ secrets.MY_SECRET }}\n-TOKEN: ${{ secrets.OLD_SECRET }}\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "workflow/dangerous-pattern",
     );
   });
 
