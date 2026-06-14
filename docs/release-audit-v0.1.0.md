@@ -19,9 +19,12 @@ document.
 - [x] `pnpm build`
 - [x] `pnpm format:check`
 - [x] `git diff --exit-code -- packages/action/dist/index.cjs`
-- [ ] GitHub Agent Gate check for the release-audit PR
-- [ ] GitHub CI check for the release-audit PR
-- [ ] GitGuardian check for the release-audit PR
+- [x] GitHub Agent Gate check for release-audit PR #21 passed on first audit
+      commit `82d68ac`.
+- [x] GitHub CI check for release-audit PR #21 passed on first audit commit
+      `82d68ac`.
+- [x] GitGuardian check for release-audit PR #21 passed on first audit commit
+      `82d68ac`.
 
 ## Unsafe PR Zoo Replay
 
