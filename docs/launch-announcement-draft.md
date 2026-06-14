@@ -7,9 +7,9 @@ Agent Gate v0.1.0: No AI PR gets merged without proof.
 ## Short Pitch
 
 Agent Gate is a deterministic CI firewall for AI-generated pull requests. It
-blocks out-of-contract edits, workflow permission escalation, agent
+flags or blocks out-of-contract edits, workflow permission escalation, agent
 control-plane drift, missing test evidence, and MCP config drift before those
-changes reach `main`.
+changes reach `main`, depending on your policy mode.
 
 `v0.1.0` is a GitHub prerelease. The core analyzer, replay CLI, root GitHub
 Action, PR report comments, self-dogfooding workflow, and CI are implemented,
