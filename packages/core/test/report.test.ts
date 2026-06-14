@@ -15,12 +15,69 @@ describe("report renderers", () => {
 
     const markdown = renderMarkdownReport(result);
 
-    expect(markdown).toContain("# Agent Gate Report");
-    expect(markdown).toContain("Decision: PASS");
+    expect(markdown).toContain("# Agent Gate: PASSED");
+    expect(markdown).toContain("Decision: pass");
     expect(markdown).toContain("Risk score: 0 / 100");
+    expect(markdown).toContain("No warning or blocking findings were detected.");
+    expect(markdown).toContain("Policy status: no blocking or warning findings.");
     expect(markdown).toContain("- Agent detected: no");
     expect(markdown).toContain("- Contract present: no");
     expect(markdown).toContain("No findings.");
+  });
+
+  it("renders a human-decision-first Markdown report for warn results", () => {
+    const result = {
+      decision: "warn" as const,
+      riskScore: 10,
+      summary: {
+        title: "Agent Gate: warning",
+        agentDetected: true,
+        contractPresent: true,
+        errorCount: 0,
+        warnCount: 1,
+        infoCount: 0,
+      },
+      findings: [
+        {
+          ruleId: "evidence/missing-test-change",
+          severity: "warn" as const,
+          title: "Missing test evidence",
+          message: "src/auth/session.ts changed without matching test evidence.",
+          path: "src/auth/session.ts",
+          evidence: [
+            {
+              label: "required tests",
+              value: "tests/auth/**",
+            },
+          ],
+          remediation: ["Add or update matching auth tests."],
+          tags: ["evidence"],
+          confidence: "medium" as const,
+        },
+      ],
+      metadata: {
+        analyzedAt: "2026-06-13T00:00:00.000Z",
+        baseSha: "base-sha",
+        headSha: "head-sha",
+        configSource: "local" as const,
+        version: "0.0.0",
+      },
+    };
+    const markdown = renderMarkdownReport(result);
+
+    expect(markdown).toContain("# Agent Gate: NEEDS HUMAN DECISION");
+    expect(markdown).toContain("Decision: warn");
+    expect(markdown).toContain("## Recommended Next Step");
+    expect(markdown).toContain("Add or review matching test evidence before merging.");
+    expect(markdown).toContain("## Policy Status");
+    expect(markdown).toContain(
+      "Policy status: warning today; eligible to become a merge gate after tuning.",
+    );
+    expect(markdown).toContain("Evidence:");
+    expect(markdown).toContain("- required tests: tests/auth/**");
+    expect(markdown).toContain("Remediation:");
+    expect(markdown).toContain("- Add or update matching auth tests.");
+    expect(JSON.parse(renderJsonReport(result))).toMatchObject({ decision: "warn" });
   });
 
   it("renders finding severity, rule id, and path in Markdown reports", () => {
@@ -57,6 +114,9 @@ describe("report renderers", () => {
       },
     });
 
+    expect(markdown).toContain("# Agent Gate: BLOCKED");
+    expect(markdown).toContain("Decision: block");
+    expect(markdown).toContain("Review or split the out-of-scope file changes before merging.");
     expect(markdown).toContain("### ERROR contract/out-of-scope");
     expect(markdown).toContain("Path: `src/payments/webhook.ts`");
   });
