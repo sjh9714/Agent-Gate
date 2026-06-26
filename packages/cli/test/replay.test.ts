@@ -71,26 +71,43 @@ const unsafePrZooFixtures = [
     name: "workflow-permission-escalation",
     expectedRuleIds: ["workflow/permission-escalation", "workflow/dangerous-pattern"],
     expectedPath: ".github/workflows/release.yml",
+    expectedDecision: "block",
+    expectedSeverity: "error",
   },
   {
     name: "agent-control-plane-drift",
     expectedRuleIds: ["agent-control-plane/drift"],
     expectedPath: "AGENTS.md",
+    expectedDecision: "block",
+    expectedSeverity: "error",
   },
   {
     name: "out-of-scope-agent-edit",
     expectedRuleIds: ["contract/out-of-scope"],
     expectedPath: "src/payments/webhook.ts",
+    expectedDecision: "block",
+    expectedSeverity: "error",
   },
   {
     name: "missing-test-evidence",
     expectedRuleIds: ["risk/high-risk-path", "evidence/missing-test-change"],
     expectedPath: "src/auth/session.ts",
+    expectedDecision: "block",
+    expectedSeverity: "error",
   },
   {
     name: "mcp-config-drift",
     expectedRuleIds: ["agent-control-plane/drift"],
     expectedPath: ".mcp.json",
+    expectedDecision: "block",
+    expectedSeverity: "error",
+  },
+  {
+    name: "package-lifecycle-script-added",
+    expectedRuleIds: ["dependency/lifecycle-script-added"],
+    expectedPath: "package.json",
+    expectedDecision: "warn",
+    expectedSeverity: "warn",
   },
 ];
 
@@ -185,6 +202,13 @@ describe("CLI replay", () => {
     expect(readme).toContain("workflow/permission-escalation");
     expect(readme).toContain("workflow/dangerous-pattern");
     expect(readme).toContain("agent-control-plane/drift");
+    expect(readme).toContain("Package lifecycle script drift");
+    expect(readme).toContain("package-lifecycle-script-added");
+    expect(readme).toContain("package_scripts:");
+    expect(readme).toContain("preinstall");
+    expect(readme).toContain(
+      "Dependency additions and lockfile mismatch checks remain future work.",
+    );
     expect(readme).toContain(".github/workflows/release.yml");
   });
 
@@ -207,14 +231,17 @@ describe("CLI replay", () => {
 
   it.each(unsafePrZooFixtures)(
     "replays unsafe-pr-zoo/$name with expected findings",
-    async ({ name, expectedRuleIds, expectedPath }) => {
+    async ({ name, expectedRuleIds, expectedPath, expectedDecision, expectedSeverity }) => {
       const input = await loadReplayFixture(unsafePrZooFixturePath(name));
       const result = await analyze(input);
       const output = renderHumanReport(result);
 
-      expect(result.decision).toBe("block");
+      expect(result.decision).toBe(expectedDecision);
       expect(result.findings.map((finding) => finding.ruleId)).toEqual(expectedRuleIds);
-      expect(output).toContain("Agent Gate: BLOCKED");
+      expect(result.findings[0]?.severity).toBe(expectedSeverity);
+      expect(output).toContain(
+        expectedDecision === "block" ? "Agent Gate: BLOCKED" : "Agent Gate: WARN",
+      );
       expect(output).toContain(expectedRuleIds[0]);
       expect(output).toContain(`Path: ${expectedPath}`);
     },
