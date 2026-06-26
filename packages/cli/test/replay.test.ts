@@ -178,6 +178,10 @@ describe("CLI replay", () => {
     expect(readme).toContain("This is enough for a first run");
     expect(readme).toContain("built-in default policy");
     expect(readme).toContain("configSource: default");
+    expect(readme).toContain("That released default policy gives");
+    expect(readme).toContain(
+      "In `v0.2.4+`, the built-in default policy also includes warning-mode package lifecycle script drift checks.",
+    );
     expect(readme).toContain("Repository-specific checks");
     expect(readme).toContain("allowed_paths");
     expect(readme).toContain("Action Reference");

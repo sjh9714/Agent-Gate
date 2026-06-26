@@ -166,6 +166,71 @@ describe("package lifecycle script drift", () => {
     );
   });
 
+  it("does not emit lifecycle script findings when modified base content is unavailable", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        files: [
+          packageJsonChange({
+            baseContent: null,
+            headContent: json({ scripts: { preinstall: "node setup.js" } }),
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "dependency/lifecycle-script-added",
+    );
+    expect(result.findings.map((finding) => finding.ruleId)).toContain(
+      "analysis/content-unavailable",
+    );
+  });
+
+  it("does not emit lifecycle script findings when modified head content is unavailable", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        files: [
+          packageJsonChange({
+            baseContent: json({ scripts: { postinstall: "node old.js" } }),
+            headContent: null,
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "dependency/package-script-drift",
+    );
+    expect(result.findings.map((finding) => finding.ruleId)).toContain(
+      "analysis/content-unavailable",
+    );
+  });
+
+  it("still detects added package manifests with lifecycle scripts", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        files: [
+          packageJsonChange({
+            status: "added",
+            baseContent: null,
+            headContent: json({ scripts: { preinstall: "node setup.js" } }),
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "dependency/lifecycle-script-added",
+        path: "package.json",
+        evidence: expect.arrayContaining([{ label: "script", value: "preinstall" }]),
+      }),
+    );
+    expect(result.findings.map((finding) => finding.ruleId)).not.toContain(
+      "analysis/content-unavailable",
+    );
+  });
+
   it("emits parse evidence for malformed base package JSON", async () => {
     const result = await analyze(
       createAnalysisInput({

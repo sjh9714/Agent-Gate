@@ -7,7 +7,7 @@
 
 > Catch risky AI-generated PRs before merge — without checking out PR code.
 
-Agent Gate is a GitHub Action that checks deterministic merge evidence: out-of-scope edits, GitHub Actions permission escalation, agent instruction drift, MCP config drift, package lifecycle script drift, and missing test-file evidence.
+Agent Gate is a GitHub Action that checks deterministic merge evidence: out-of-scope edits, GitHub Actions permission escalation, agent instruction drift, MCP config drift, missing test-file evidence, and package lifecycle script drift in `v0.2.4+`.
 
 The Action uses no checkout of PR code, no runtime LLM calls, no repository script execution, and no policy loaded from an untrusted PR head. The same analyzer also powers local replay fixtures for deterministic demos.
 
@@ -325,7 +325,9 @@ package_scripts:
   severity: warn
 ```
 
-Starting in `v0.2.3`, if the default `agent-gate.yml` is confirmed absent on the PR base branch, Agent Gate can use its built-in default policy and record `configSource: default` in report metadata. That default policy gives repository-agnostic first signals for GitHub Actions workflow checks, agent-control-plane drift, pinned-action warnings, and package lifecycle script drift. Repository-specific checks such as agent detection, required PR contracts, high-risk source paths, and matching test-file evidence still require `agent-gate.yml`.
+Starting in `v0.2.3`, if the default `agent-gate.yml` is confirmed absent on the PR base branch, Agent Gate can use its built-in default policy and record `configSource: default` in report metadata. That released default policy gives repository-agnostic first signals for GitHub Actions workflow checks, agent-control-plane drift, and pinned-action warnings.
+
+In `v0.2.4+`, the built-in default policy also includes warning-mode package lifecycle script drift checks. Repository-specific checks such as agent detection, required PR contracts, high-risk source paths, and matching test-file evidence still require `agent-gate.yml`.
 
 ## Status And Roadmap
 

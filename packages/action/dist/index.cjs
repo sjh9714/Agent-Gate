@@ -47810,26 +47810,31 @@ var contractBlockedPathRule = {
 function isWorkflowFile(ctx, path) {
   return ctx.helpers.matchesAny(path, ctx.input.config.github_actions.paths);
 }
+function isPackageManifest(ctx, path) {
+  return ctx.input.config.package_scripts.enabled && ctx.helpers.matchesAny(path, ctx.input.config.package_scripts.paths);
+}
 function missingBaseContent(file2) {
   return file2.status !== "added" && file2.baseContent == null;
 }
 function missingHeadContent(file2) {
   return file2.status !== "removed" && file2.headContent == null;
 }
-function contentUnavailableFinding(file2, ref) {
+function contentUnavailableFinding(file2, ref, options) {
   return {
     ruleId: "analysis/content-unavailable",
-    severity: "error",
+    severity: options.severity,
     title: "Changed file content unavailable",
-    message: `Unable to read ${ref} content for ${file2.path}; workflow analysis may be incomplete.`,
+    message: `Unable to read ${ref} content for ${file2.path}; ${options.subject} analysis may be incomplete.`,
     path: file2.path,
     evidence: [
       { label: "changed_file", value: file2.path },
       { label: "content_ref", value: ref },
       { label: "file_status", value: file2.status }
     ],
-    remediation: ["Review this workflow change manually or rerun once content is available."],
-    tags: ["analysis", "content-unavailable", "workflow"],
+    remediation: [
+      `Review this ${options.subject} change manually or rerun once content is available.`
+    ],
+    tags: options.tags,
     confidence: "medium"
   };
 }
@@ -47839,14 +47844,25 @@ var contentUnavailableRule = {
   run(ctx) {
     const findings = [];
     for (const file2 of ctx.helpers.changedFiles()) {
-      if (!isWorkflowFile(ctx, file2.path)) {
+      const workflowFile = isWorkflowFile(ctx, file2.path);
+      const packageManifest = !workflowFile && isPackageManifest(ctx, file2.path);
+      if (!workflowFile && !packageManifest) {
         continue;
       }
+      const findingOptions = workflowFile ? {
+        severity: "error",
+        subject: "workflow",
+        tags: ["analysis", "content-unavailable", "workflow"]
+      } : {
+        severity: ctx.input.config.package_scripts.severity,
+        subject: "package manifest",
+        tags: ["analysis", "content-unavailable", "dependency", "package-script"]
+      };
       if (missingBaseContent(file2)) {
-        findings.push(contentUnavailableFinding(file2, "base"));
+        findings.push(contentUnavailableFinding(file2, "base", findingOptions));
       }
       if (missingHeadContent(file2)) {
-        findings.push(contentUnavailableFinding(file2, "head"));
+        findings.push(contentUnavailableFinding(file2, "head", findingOptions));
       }
     }
     return findings;
@@ -47902,11 +47918,11 @@ var highRiskPathRule = {
     return findings;
   }
 };
-function isPackageManifest(ctx, path) {
+function isPackageManifest2(ctx, path) {
   return ctx.helpers.matchesAny(path, ctx.input.config.package_scripts.paths);
 }
 function parsePackageJson(content) {
-  if (!content) {
+  if (content == null) {
     return { scripts: {} };
   }
   try {
@@ -47982,7 +47998,13 @@ var packageScriptDriftRule = {
     }
     const findings = [];
     for (const file2 of ctx.helpers.changedFiles()) {
-      if (!isPackageManifest(ctx, file2.path) || file2.status === "removed") {
+      if (!isPackageManifest2(ctx, file2.path) || file2.status === "removed") {
+        continue;
+      }
+      if (file2.status !== "added" && file2.baseContent == null) {
+        continue;
+      }
+      if (file2.headContent == null) {
         continue;
       }
       const base = parsePackageJson(file2.baseContent);

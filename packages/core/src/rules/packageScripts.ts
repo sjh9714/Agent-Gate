@@ -13,7 +13,7 @@ function isPackageManifest(ctx: RuleContext, path: string): boolean {
 }
 
 function parsePackageJson(content: string | null | undefined): ParsePackageJsonResult {
-  if (!content) {
+  if (content == null) {
     return { scripts: {} };
   }
 
@@ -122,6 +122,14 @@ export const packageScriptDriftRule: Rule = {
 
     for (const file of ctx.helpers.changedFiles()) {
       if (!isPackageManifest(ctx, file.path) || file.status === "removed") {
+        continue;
+      }
+
+      if (file.status !== "added" && file.baseContent == null) {
+        continue;
+      }
+
+      if (file.headContent == null) {
         continue;
       }
 
