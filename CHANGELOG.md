@@ -12,6 +12,7 @@ pre-release, so APIs and rule names may change between versions.
 
 - Add first-report onboarding guidance and Windows install instructions.
 - Add live first-run demo PR references for README conversion.
+- Add live workflow permission escalation demo evidence.
 
 ### Changed
 
