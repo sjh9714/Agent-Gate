@@ -1,8 +1,8 @@
 # Demo PRs
 
-This page collects concrete Agent Gate examples. The first example is a live
-sandbox pull request. The later examples are local replay fixtures, not live
-external pull requests.
+This page collects concrete Agent Gate examples. The first two examples are live
+sandbox pull requests. The tuned contract example is a local replay fixture, not
+a live external pull request.
 
 ## First-Run Default Policy
 
@@ -23,7 +23,23 @@ or adding `agent-gate.yml` first.
 
 ## Workflow Permission Escalation
 
-Fixture:
+- Pull request: https://github.com/sjh9714/agent-gate-install-smoke-20260617/pull/12
+- Workflow run: https://github.com/sjh9714/agent-gate-install-smoke-20260617/actions/runs/28313128684
+- Action ref: `sjh9714/Agent-Gate@v0.2.5`
+- Checkout step: not used
+- Base-branch `agent-gate.yml`: absent
+- Policy source: built-in default
+- Report metadata: `configSource: default`
+- Final decision: `warn`
+- Finding: `workflow/permission-escalation` for `.github/workflows/demo-release.yml`
+- Demo change: `permissions.contents` changed from `read` to `write`
+
+This PR verifies that the built-in default policy can surface workflow
+permission escalation evidence without checking out PR code or adding
+`agent-gate.yml` first. It intentionally avoids `pull_request_target` so the live
+demo stays focused on permission escalation.
+
+Related local replay fixture:
 
 ```text
 fixtures/unsafe-pr-zoo/workflow-permission-escalation
@@ -36,7 +52,7 @@ pnpm --filter agent-gate build
 node packages/cli/dist/main.js replay fixtures/unsafe-pr-zoo/workflow-permission-escalation
 ```
 
-This fixture demonstrates deterministic workflow evidence such as
+The fixture demonstrates deterministic workflow evidence such as
 `workflow/permission-escalation` and `workflow/dangerous-pattern`.
 
 ## Tuned Contract: Out-Of-Scope Edit
