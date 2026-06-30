@@ -50,7 +50,7 @@ describe("workflow/permission-escalation", () => {
           { label: "before", value: "read" },
           { label: "after", value: "write" },
           { label: "permission_scope", value: "workflow" },
-          { label: "affected_area", value: "release, tag, and repository content writes" },
+          { label: "affected_capability", value: "repository_content_writes" },
         ]),
       }),
     );
@@ -83,7 +83,40 @@ describe("workflow/permission-escalation", () => {
           { label: "after", value: "write" },
           { label: "permission_scope", value: "job" },
           { label: "job", value: "release" },
-          { label: "affected_area", value: "release, tag, and repository content writes" },
+          { label: "affected_capability", value: "repository_content_writes" },
+        ]),
+      }),
+    );
+    expect(result.findings[0]?.message).toBe(
+      "contents permission increased from read to write at job 'release' scope; this can affect release, tag, and repository content writes. Confirm whether this permission boundary change is expected.",
+    );
+  });
+
+  it("emits when removing restrictive job permissions exposes broader workflow permissions", async () => {
+    const result = await analyze(
+      createAnalysisInput({
+        config: parseConfig("version: 1\nmode: block\n"),
+        files: [
+          workflowChange({
+            baseContent:
+              "permissions:\n  contents: write\njobs:\n  release:\n    permissions:\n      contents: read\n    steps:\n      - run: echo release\n",
+            headContent:
+              "permissions:\n  contents: write\njobs:\n  release:\n    steps:\n      - run: echo release\n",
+          }),
+        ],
+      }),
+    );
+
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        ruleId: "workflow/permission-escalation",
+        evidence: expect.arrayContaining([
+          { label: "permission", value: "contents" },
+          { label: "before", value: "read" },
+          { label: "after", value: "write" },
+          { label: "permission_scope", value: "job" },
+          { label: "job", value: "release" },
+          { label: "affected_capability", value: "repository_content_writes" },
         ]),
       }),
     );
@@ -110,13 +143,11 @@ describe("workflow/permission-escalation", () => {
     expect(parsed.findings[0].evidenceSnapshot.evidence).toEqual(
       expect.arrayContaining([
         { label: "permission_scope", value: "workflow" },
-        { label: "affected_area", value: "release, tag, and repository content writes" },
+        { label: "affected_capability", value: "repository_content_writes" },
       ]),
     );
     expect(markdown).toContain("- evidence.permission_scope: workflow");
-    expect(markdown).toContain(
-      "- evidence.affected_area: release, tag, and repository content writes",
-    );
+    expect(markdown).toContain("- evidence.affected_capability: repository_content_writes");
   });
 
   it("emits for pull-requests none to write", async () => {

@@ -48493,6 +48493,32 @@ function affectedArea(permission) {
       return "GitHub API writes for this permission";
   }
 }
+function affectedCapability(permission) {
+  switch (permission) {
+    case "contents":
+      return "repository_content_writes";
+    case "pull-requests":
+      return "pull_request_writes";
+    case "issues":
+      return "issue_comment_writes";
+    case "deployments":
+      return "deployment_writes";
+    case "packages":
+      return "package_publishing";
+    case "pages":
+      return "pages_publishing";
+    case "id-token":
+      return "oidc_token_minting";
+    case "security-events":
+      return "security_event_writes";
+    case "checks":
+      return "check_run_writes";
+    case "statuses":
+      return "commit_status_writes";
+    default:
+      return "github_api_writes";
+  }
+}
 function scopeLabel(escalation) {
   return escalation.scope.kind;
 }
@@ -48504,13 +48530,14 @@ function scopeDescription(escalation) {
 }
 function escalationFinding(ctx, filePath, escalation) {
   const area = affectedArea(escalation.permission);
+  const capability = affectedCapability(escalation.permission);
   const evidence = [
     { label: "changed_file", value: filePath },
     { label: "permission", value: escalation.permission },
     { label: "before", value: escalation.before },
     { label: "after", value: escalation.after },
     { label: "permission_scope", value: scopeLabel(escalation) },
-    { label: "affected_area", value: area }
+    { label: "affected_capability", value: capability }
   ];
   if (escalation.scope.kind === "job") {
     evidence.push({ label: "job", value: escalation.scope.job });
@@ -48531,6 +48558,13 @@ function escalationFinding(ctx, filePath, escalation) {
     confidence: "high"
   };
 }
+function effectiveJobPermissions(workflow, job) {
+  const jobConfig = jobsForWorkflow(workflow)[job];
+  if (hasExplicitPermissions(jobConfig)) {
+    return normalizeWorkflowPermissions(jobConfig.permissions);
+  }
+  return permissionsForWorkflow(workflow);
+}
 function workflowPermissionEscalations(baseWorkflow, headWorkflow) {
   const escalations = findScopedPermissionEscalations(
     permissionsForWorkflow(baseWorkflow),
@@ -48539,15 +48573,19 @@ function workflowPermissionEscalations(baseWorkflow, headWorkflow) {
   );
   const baseJobs = jobsForWorkflow(baseWorkflow);
   const headJobs = jobsForWorkflow(headWorkflow);
-  for (const [job, headJob] of Object.entries(headJobs)) {
-    if (!hasExplicitPermissions(headJob)) {
+  const jobNames = /* @__PURE__ */ new Set([...Object.keys(baseJobs), ...Object.keys(headJobs)]);
+  for (const job of jobNames) {
+    const headJob = headJobs[job];
+    if (headJob === void 0) {
       continue;
     }
-    const basePermissions = hasExplicitPermissions(baseJobs[job]) ? normalizeWorkflowPermissions(baseJobs[job]?.permissions) : permissionsForWorkflow(baseWorkflow);
+    if (!hasExplicitPermissions(baseJobs[job]) && !hasExplicitPermissions(headJob)) {
+      continue;
+    }
     escalations.push(
       ...findScopedPermissionEscalations(
-        basePermissions,
-        normalizeWorkflowPermissions(headJob.permissions),
+        effectiveJobPermissions(baseWorkflow, job),
+        effectiveJobPermissions(headWorkflow, job),
         { kind: "job", job }
       )
     );
