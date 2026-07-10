@@ -2,7 +2,7 @@
 
 The roadmap is ordered by evidence quality, not promised dates.
 
-## Now
+## Shipped in v0.3.1
 
 - Ship v0.3.1 as a normal release with a public `npx` scan path.
 - Fail closed on incomplete GitHub file/content collection.
@@ -13,11 +13,15 @@ The roadmap is ordered by evidence quality, not promised dates.
 
 ## Next
 
-- Measure false-positive rates with external design partners.
-- Expand agent-action registry only from official, testable contracts.
-- Add more fixture recipes and community-maintained rule examples.
-- Improve reviewer/CODEOWNERS evidence without executing target code.
-- Publish verified case studies from real, consented installations.
+- Measure false-positive rates with three external design partners and publish
+  only consented results.
+- Confirm at least one public external installation and turn its setup or noise
+  into reproducible adopter proof.
+- Add contributor-owned replay fixtures for reusable-workflow and container
+  pinning before expanding rule behavior.
+- Expand the agent-action registry only from official, testable contracts.
+- Improve reviewer/CODEOWNERS evidence only after the existing RFC receives
+  concrete maintainer feedback.
 
 ## Later
 
