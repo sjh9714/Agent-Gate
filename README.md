@@ -5,19 +5,32 @@
 [![MergeWarden](https://github.com/sjh9714/mergewarden/actions/workflows/mergewarden.yml/badge.svg)](https://github.com/sjh9714/mergewarden/actions/workflows/mergewarden.yml)
 [![License](https://img.shields.io/github/license/sjh9714/mergewarden)](LICENSE)
 
-> **AI agents can open PRs. MergeWarden shows when they cross the line.**
+> **The warden between AI agents and your main branch.**
 
-MergeWarden is a checkout-free policy gate that surfaces scope escapes, GitHub
-Actions privilege escalation, agent-control-plane drift, and risky package
-script changes before merge.
+Coding agents open pull requests all day. MergeWarden is the change-control
+gate that checks each one against boundaries only your repository can define:
 
-It does not execute pull-request code, load policy from the PR head, or call an
-LLM at runtime. Every decision includes deterministic evidence that can be
-replayed locally.
+- **Did the PR stay inside its declared scope?** Agents declare intended paths
+  in a PR-body contract; edits outside them become findings.
+- **Did it touch the agent control plane?** Changes to `AGENTS.md`,
+  `CLAUDE.md`, `.mcp.json`, `.cursor/**`, and similar files steer every future
+  agent PR and always deserve human eyes.
+- **Did it wire untrusted text into an agent prompt?** New paths from PR
+  bodies, titles, or comments into registered agentic workflows are traced and
+  flagged.
+
+It also catches workflow permission escalation, unpinned supply-chain
+references, and risky package lifecycle scripts.
+It does not execute pull-request code, load policy from the PR head, or call
+an LLM at runtime.
+Every decision includes deterministic evidence that can be replayed locally.
+
+MergeWarden was formerly named Agent Gate; old links redirect and pre-v0.4.0
+proofs show the original name.
 
 [Try a public PR](#try-it-in-60-seconds) · [Install the Action](#install-in-30-seconds) · [What it catches](#what-it-catches) · [Adopt safely](#adopt-safely) · [Documentation](docs/README.md)
 
-![Real MergeWarden v0.3.1 report from a public composite PR](docs/assets/mergewarden-report-v0.3.1.png)
+![Report from the v0.3.1 release, under the former Agent Gate name](docs/assets/mergewarden-report-v0.3.1.png)
 
 _Real checkout-free report from [public composite PR #16](https://github.com/sjh9714/agent-gate-install-smoke-20260617/pull/16) and its [SHA-pinned Action run](https://github.com/sjh9714/agent-gate-install-smoke-20260617/actions/runs/29071622785)._
 
@@ -35,7 +48,7 @@ A full pull-request URL works too:
 npx --yes mergewarden@0.4.0 scan https://github.com/owner/repository/pull/123
 ```
 
-![Real npm CLI scan with MergeWarden v0.3.1](docs/assets/mergewarden-cli-v0.3.1.gif)
+![CLI scan recorded on the v0.3.1 release, under the former Agent Gate name](docs/assets/mergewarden-cli-v0.3.1.gif)
 
 Use `GH_TOKEN` or `GITHUB_TOKEN` for private repositories or higher API rate
 limits. MergeWarden intentionally has no token command-line flag.
@@ -71,12 +84,8 @@ jobs:
           fail-on-block: false
 ```
 
-For an immutable, commit-addressed install, pin the exact v0.3.1 release
-commit:
-
-```yaml
-- uses: sjh9714/mergewarden@5fc4a3a5087620ff23c6cb5b0351c3969339fc01
-```
+For an immutable, commit-addressed install, replace the version tag with the
+full 40-character commit SHA shown on the v0.4.0 release.
 
 No checkout step is needed.
 MergeWarden does not publish or recommend a mutable `v0` tag.
@@ -86,22 +95,23 @@ branch selects the built-in warn policy. Authentication, rate-limit, and server
 errors never fall back silently.
 
 Verified checkout-free Action evidence is available in
-[sandbox PR #16](https://github.com/sjh9714/agent-gate-install-smoke-20260617/pull/16).
-Its public run downloads the exact v0.3.1 release commit and reports contract
-scope escapes, workflow permission escalation, and agent-control-plane drift.
+[sandbox PR #16](https://github.com/sjh9714/agent-gate-install-smoke-20260617/pull/16),
+recorded on the v0.3.1 release under the former Agent Gate name. Its public
+run downloads the exact release commit and reports contract scope escapes,
+workflow permission escalation, and agent-control-plane drift.
 
 ## What It Catches
 
 | Boundary                   | Deterministic evidence                                              |
 | -------------------------- | ------------------------------------------------------------------- |
 | Declared PR scope          | Files outside `allowed_paths` or inside `blocked_paths`             |
-| Workflow privilege         | Permission escalation, new write-all or OIDC access                 |
-| Workflow supply chain      | Unpinned actions, reusable workflows, and containers                |
-| Dangerous triggers         | `pull_request_target` use of attacker-controlled PR head refs       |
-| Agentic workflow injection | Untrusted GitHub text flowing into registered agent prompts         |
 | Agent control plane        | Changes to `AGENTS.md`, `.mcp.json`, `.codex/**`, and related files |
-| Test evidence              | High-risk source changes without matching test-file changes         |
+| Agentic workflow injection | Untrusted GitHub text flowing into registered agent prompts         |
+| Workflow privilege         | Permission escalation, new write-all or OIDC access                 |
+| Dangerous triggers         | `pull_request_target` use of attacker-controlled PR head refs       |
+| Workflow supply chain      | Unpinned actions, reusable workflows, and containers                |
 | Package execution          | Added or changed install/prepare lifecycle scripts                  |
+| Test evidence              | High-risk source changes without matching test-file changes         |
 | Analysis integrity         | Missing content, incomplete file lists, or report limits            |
 
 MergeWarden evaluates changes rather than re-reporting every pre-existing
