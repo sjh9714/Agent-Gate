@@ -108,3 +108,26 @@ copilot 9.0%, claude-code-body 2.0%, devin 1.1%); cohort attribution is
 heuristic, cohort populations differ in repository mix, and none of this
 measures code quality — only boundary-crossing evidence under the default
 policy.
+
+## Related work
+
+This study measures a different axis than most prior empirical work on agent
+PRs, which has focused on volume, structure, and merge behavior rather than
+policy-boundary crossings:
+
+- Xu, Subramanian, and Karthik, _AI Agent Pull Requests on GitHub: Frequency,
+  Structure, and Merge Conflict Rates_ (arXiv:2607.04697, 2026), use the
+  AIDev-pop dataset (33,596 PRs across 2,807 repositories) to quantify how
+  often agents submit concurrently to the same repository and the resulting
+  conflict rates. Their focus is temporal overlap and merge conflicts; ours is
+  whether a merged agent PR declared its scope and whether it crossed
+  repository-defined boundaries. The two are complementary: their work shows
+  agent PRs arrive in volume and collide, and this study shows that when they
+  land, none declared a machine-checkable scope.
+
+The broader context is the wave of AI-contribution policies now being adopted
+across open source (Apache, the Linux Foundation, and the OpenSSF Technical
+Advisory Council's foundation-wide policy, among many others). Those policies
+establish disclosure and human-review expectations in prose; this study is
+about the enforcement gap underneath them — what an automated, deterministic
+check can and cannot verify about an agent PR before merge.
